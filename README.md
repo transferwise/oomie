@@ -15,3 +15,9 @@ Update manifests in `example.yaml` to use image and apply
 ```
 $ kubectl apply -f example.yaml
 ```
+
+```
+$ kubectl get events -n demo-app
+LAST SEEN   TYPE      REASON      OBJECT                        MESSAGE
+30s         Warning   OOM         pod/demo-app-d944568f6-vnhk5   System OOM encountered, victim process: nginx, pid: 1270360, uid: 65534
+```
