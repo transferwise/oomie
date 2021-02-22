@@ -27,7 +27,7 @@ metadata:
     seccomp.security.alpha.kubernetes.io/allowedProfileNames: runtime/default
 spec:
   allowedHostPaths:
-    - pathPrefix: /var/log/
+    - pathPrefix: /var/log/kern.log
       readOnly: true
   fsGroup:
     rule: RunAsAny
@@ -142,9 +142,11 @@ spec:
           image: oomie:latest
           volumeMounts:
             - name: kernel-logs
-              mountPath: "/var/log/"
+              mountPath: "/var/log/kern.log"
               readOnly: true
       volumes:
         - name: kernel-logs
           hostPath:
-            path: "/var/log/"
+            path: "/var/log/kern.log"
+            type: File
+

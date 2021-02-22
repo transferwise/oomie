@@ -7,10 +7,10 @@ Maps `/var/log/kern.log` OOM messages to running Kubernetes pods. This is useful
 First compile and build the docker images
 
 ```
-$ make container
+$ make all
 ```
 
-Update manifests in `example.yaml` to use image and apply
+Apply kubernetes manifests
 
 ```
 $ kubectl apply -f example.yaml
