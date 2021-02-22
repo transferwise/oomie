@@ -1,6 +1,6 @@
 # OOMIE
 
-Maps `/var/log/kern.log` OOM messages to running Kubernetes pods. This is useful when the primary container forks multiple child processes, as well as mapping OOM's from side-cars.
+Maps `/var/log/kern.log` OOM messages to running Kubernetes pods. This is useful when the primary container forks multiple child processes, as well as mapping OOM's from init or sidecar containers.
 
 ## Installation
 
