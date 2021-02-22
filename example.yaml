@@ -131,10 +131,6 @@ spec:
     spec:
       tolerations:
         - operator: Exists
-      dnsConfig:
-        nameservers:
-          - "169.254.20.10"
-      dnsPolicy: None
       serviceAccountName: oomie
       containers:
         - name: oomie
