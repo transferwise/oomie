@@ -4,7 +4,7 @@ import (
 	"context"
 	"flag"
 	"fmt"
-	"github.com/hpcloud/tail"
+	"github.com/google/cadvisor/utils/oomparser"
 	logger "github.com/sirupsen/logrus"
 	v1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -21,18 +21,17 @@ import (
 	"path/filepath"
 	"regexp"
 	"runtime"
+	"time"
 )
 
 var (
-	oomKillRE = regexp.MustCompile("^.*oom-kill:.*(?:oom_memcg=\\/kubepods\\/burstable\\/pod(?P<pod>[a-z0-9-]+)).*(?:task=(?P<task>[a-zA-Z]+)).*(?:pid=(?P<pid>\\d+)).*(?:uid=(?P<uid>\\d+))")
-	log       *logger.Logger
+	log             *logger.Logger
+	containerRegexp = regexp.MustCompile(`^\/kubepods\/pod(.*)`)
 )
 
 type oomEvent struct {
-	PodID   string
-	Process string
-	PID     string
-	UID     string
+	PodID  string
+	Parsed *oomparser.OomInstance
 }
 
 func main() {
@@ -51,7 +50,6 @@ func main() {
 	} else {
 		kubeconfig = flag.String("kubeconfig", "", "absolute path to the kubeconfig file")
 	}
-	kernPath := flag.String("kernel-log-path", "/var/log/kern.log", "absolute path to the kern.log file")
 	flag.Parse()
 
 	nodename := os.Getenv("NODENAME")
@@ -65,48 +63,38 @@ func main() {
 	}
 
 	log.Print("Starting application")
+	startTime := time.Now()
 
-	t, err := tail.TailFile(*kernPath, tail.Config{
-		Follow:    true,
-		MustExist: true,
-		Logger:    log,
-		Location: &tail.SeekInfo{
-			Whence: 2,
-		},
-	})
+	oomLog, err := oomparser.New()
 	if err != nil {
-		log.Fatal(err.Error())
+		panic(err.Error())
 	}
+	outStream := make(chan *oomparser.OomInstance, 10)
+	go oomLog.StreamOoms(outStream)
 
-	for line := range t.Lines {
-		match := oomKillRE.FindStringSubmatch(line.Text)
-		result := make(map[string]string)
-
-		if match != nil {
-			for i, name := range oomKillRE.SubexpNames() {
-				if i != 0 && name != "" {
-					result[name] = match[i]
-				}
+	for event := range outStream {
+		log.Debugf("raw oom event: %v", event)
+		parsedContainer := containerRegexp.FindStringSubmatch(event.VictimContainerName)
+		if parsedContainer != nil {
+			if event.TimeOfDeath.Before(startTime) {
+				log.Infof("historic oom, skipping: %s", parsedContainer[1])
+				continue
 			}
-
 			oom := &oomEvent{
-				PodID:   result["pod"],
-				Process: result["task"],
-				PID:     result["pid"],
-				UID:     result["uid"],
+				PodID:  parsedContainer[1],
+				Parsed: event,
 			}
-
 			processOomEvent(client, nodename, oom)
 		}
 	}
+	log.Errorf("Unexpectedly stopped receiving OOM notifications")
 }
 
 func processOomEvent(client *kubernetes.Clientset, nodename string, event *oomEvent) {
 	log.WithFields(logger.Fields{
 		"pod_id":  event.PodID,
-		"process": event.Process,
-		"pid":     event.PID,
-		"uid":     event.UID,
+		"process": event.Parsed.ProcessName,
+		"pid":     event.Parsed.Pid,
 	}).Info("Parsed OOM event")
 
 	pod, err := client.CoreV1().Pods("").List(context.TODO(), metav1.ListOptions{
@@ -135,8 +123,7 @@ func emitEvent(client *kubernetes.Clientset, event *oomEvent, pod v1.Pod) {
 	eventBroadcaster.StartRecordingToSink(
 		&typedcorev1.EventSinkImpl{Interface: client.CoreV1().Events(pod.Namespace)})
 	recorder := eventBroadcaster.NewRecorder(scheme.Scheme, v1.EventSource{Component: "oomie"})
-
-	msg := fmt.Sprintf("System OOM encountered, victim process: %s, pid: %s, uid: %s", event.Process, event.PID, event.UID)
+	msg := fmt.Sprintf("System OOM encountered, victim process: %s, pid: %d", event.Parsed.ProcessName, event.Parsed.Pid)
 	recorder.Event(ref, v1.EventTypeWarning, "OOM", msg)
 }
 
@@ -145,12 +132,10 @@ func initKubeClient(kubeconfig *string) (*kubernetes.Clientset, error) {
 	kubeConfig, err := restclient.InClusterConfig()
 	if err != nil {
 		log.Info("unable to load in-cluster configuration, using KUBE_CONFIG location")
-
 		config, err := clientcmd.BuildConfigFromFlags("", *kubeconfig)
 		if err != nil {
 			return nil, err
 		}
-
 		kubeClient, err := kubernetes.NewForConfig(config)
 		if err != nil {
 			return nil, err
