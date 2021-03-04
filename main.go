@@ -26,7 +26,7 @@ import (
 
 var (
 	log             *logger.Logger
-	containerRegexp = regexp.MustCompile(`^\/kubepods\/pod(.*)`)
+	containerRegexp = regexp.MustCompile(`^\/kubepods\/(?:burstable\/)?pod([a-z0-9-]+)`)
 )
 
 type oomEvent struct {
