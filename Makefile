@@ -13,7 +13,7 @@ deps:
 fmt:
 	find . -path ./vendor -prune -o -name '*.go' -print | xargs -L 1 -I % gofmt -s -w %
 
-build: clean fmt
+build: clean fmt deps
 	$(ENVVAR) CGO_ENABLED=0 go build -mod vendor -o ./bin/$(APP_NAME)
 
 container:
