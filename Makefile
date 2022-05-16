@@ -1,7 +1,6 @@
 all: deps build
 
 ENVVAR = GOOS=linux GOARCH=amd64
-TAG = v0.0.2
 APP_NAME = oomie
 
 clean:
@@ -15,9 +14,5 @@ fmt:
 
 build: clean fmt deps
 	$(ENVVAR) CGO_ENABLED=0 go build -mod vendor -o ./bin/$(APP_NAME)
-
-container:
-	docker build -f Dockerfile -t $(APP_NAME):latest .
-	docker tag $(APP_NAME):latest ${APP_NAME}:$(TAG)
 
 .PHONY: all clean deps fmt build container
