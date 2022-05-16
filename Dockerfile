@@ -1,4 +1,4 @@
-FROM golang:1.15 as builder
+FROM golang:1.17 as builder
 WORKDIR $GOPATH/src/github.com/transferwise/oomie
 COPY . $GOPATH/src/github.com/transferwise/oomie
 RUN make build
