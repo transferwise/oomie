@@ -5,8 +5,8 @@ go 1.17
 require (
 	github.com/google/cadvisor v0.44.1
 	github.com/sirupsen/logrus v1.8.1
-	k8s.io/api v0.24.2
-	k8s.io/apimachinery v0.24.2
+	k8s.io/api v0.24.3
+	k8s.io/apimachinery v0.24.3
 	k8s.io/client-go v0.24.2
 )
 
