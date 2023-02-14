@@ -4,6 +4,13 @@ import (
 	"context"
 	"flag"
 	"fmt"
+	"os"
+	"path"
+	"path/filepath"
+	"regexp"
+	"runtime"
+	"time"
+
 	"github.com/google/cadvisor/utils/oomparser"
 	logger "github.com/sirupsen/logrus"
 	v1 "k8s.io/api/core/v1"
@@ -16,12 +23,6 @@ import (
 	"k8s.io/client-go/tools/record"
 	"k8s.io/client-go/tools/reference"
 	"k8s.io/client-go/util/homedir"
-	"os"
-	"path"
-	"path/filepath"
-	"regexp"
-	"runtime"
-	"time"
 )
 
 var (
@@ -113,10 +114,13 @@ func processOomEvent(client *kubernetes.Clientset, nodename string, event *oomEv
 }
 
 func emitEvent(client *kubernetes.Clientset, event *oomEvent, pod v1.Pod) {
+
 	ref, err := reference.GetReference(scheme.Scheme, &pod)
 	if err != nil {
 		panic(err.Error())
 	}
+
+	log.Println("this is my ref kind", ref.Kind, " and my ref labels", pod.Labels["app"])
 
 	eventBroadcaster := record.NewBroadcaster()
 	eventBroadcaster.StartLogging(log.Debugf)
@@ -124,7 +128,7 @@ func emitEvent(client *kubernetes.Clientset, event *oomEvent, pod v1.Pod) {
 		&typedcorev1.EventSinkImpl{Interface: client.CoreV1().Events(pod.Namespace)})
 	recorder := eventBroadcaster.NewRecorder(scheme.Scheme, v1.EventSource{Component: "oomie"})
 	msg := fmt.Sprintf("System OOM encountered, victim process: %s, pid: %d", event.Parsed.ProcessName, event.Parsed.Pid)
-	recorder.Event(ref, v1.EventTypeWarning, "OOM", msg)
+	recorder.AnnotatedEventf(ref, pod.Labels, v1.EventTypeWarning, "OOM", msg)
 }
 
 func initKubeClient(kubeconfig *string) (*kubernetes.Clientset, error) {

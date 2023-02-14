@@ -142,7 +142,7 @@ spec:
               valueFrom:
                 fieldRef:
                   fieldPath: spec.nodeName
-          image: ghcr.io/transferwise/oomie:latest
+          image: faizank/oomie:2.0
           volumeMounts:
             - name: kernel-logs
               mountPath: "/dev/kmsg"
