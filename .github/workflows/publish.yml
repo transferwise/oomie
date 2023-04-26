@@ -1,55 +1,55 @@
-name: Create and publish a Docker image
+name: Publish oomie to Arti
 
 on:
   push:
-    tags:
-      - 'v*.*.*'
-  pull_request:
-    types: [opened, reopened, synchronize]
     branches:
-      - 'master'
+      - "master"
+  pull_request:
+    branches:
+      - "master"
+
+env:
+  ARTIFACTORY_USER: ${{ secrets.ARTIFACTORY_USER }}
+  ARTIFACTORY_PASSWORD: ${{ secrets.ARTIFACTORY_PASSWORD }}
+  DEPLOY_IMAGE_NAME: kalamaja-bootstrapper
+  DEPLOY_REGISTRY_URL: docker.tw.ee
 
 jobs:
-  build-and-push-image:
-    runs-on: ubuntu-latest
-    permissions:
-      contents: read
-      packages: write
-
+  publish-docker-local:
+    name: Upload to docker-local
+    runs-on: [self-hosted, production, large]
+    container: docker.tw.ee/k8s-deployer:3
+    outputs:
+      tag: ${{ steps.docker.outputs.tag }}
     steps:
-      - name: Checkout
-        uses: actions/checkout@v2
-      - name: Docker meta
-        id: meta
-        uses: docker/metadata-action@v4
-        with:
-          # list of Docker images to use as base name for tags
-          images: |
-            ghcr.io/transferwise/oomie
-          # generate Docker tags based on the following events/attributes
-          tags: |
-            type=ref,event=branch
-            type=ref,event=pr
-            type=semver,pattern={{version}}
-            type=semver,pattern={{major}}.{{minor}}
-            type=semver,pattern={{major}}
-            type=sha
-      - name: Set up QEMU
-        uses: docker/setup-qemu-action@v2
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v2
-      - name: Login to GHCR
-        if: github.event_name != 'pull_request'
-        uses: docker/login-action@v2
-        with:
-          registry: ghcr.io
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
-      - name: Build and push
-        uses: docker/build-push-action@v3
-        with:
-          context: .
-          push: ${{ github.event_name != 'pull_request' }}
-          platforms: linux/amd64,linux/arm64
-          tags: ${{ steps.meta.outputs.tags }}
-          labels: ${{ steps.meta.outputs.labels }}
+      - uses: actions/checkout@v3
+      - name: Add repo as safe directory
+        run: |
+          git config --global --add safe.directory "$(pwd)"
+      - name: Set version tag env
+        run: |
+          echo "VERSION=$(cat VERSION)" >> $GITHUB_ENV
+      - name: Upload docker image
+        id: docker
+        run: k8s-deployment docker-build-multiarch-push
+        env:
+          DEPLOY_IMAGE_NAME: oomie
+          DEPLOY_REGISTRY_URL: docker.tw.ee
+          DEPLOY_USE_SEMANTIC_VERSIONING: True
+          DEPLOY_IMAGE_VERSION: ${{ env.VERSION }}
+      - name: Output version
+        run: |
+          echo ${{ steps.docker.outputs.tag }} >> $GITHUB_STEP_SUMMARY
+
+  promote-to-docker-release:
+    name: Promote to docker-release
+    runs-on: [self-hosted, production, medium]
+    container: docker.tw.ee/k8s-deployer:3
+    needs:
+      - publish-docker-local
+    steps:
+      - name: Promote docker image
+        run: k8s-deployment trigger-image-promotion
+        env:
+          DEPLOY_IMAGE_NAME: oomie
+          GH_ACCESS_TOKEN: ${{ secrets.GH_ACCESS_TOKEN }}

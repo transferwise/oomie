@@ -1,0 +1,20 @@
+name: Build and test
+
+on:
+  pull_request:
+    branches:
+      - master
+      - main
+
+jobs:
+  build_and_test:
+    name: Build and test
+    runs-on: [self-hosted, production, medium]
+    container: docker.tw.ee/actions_golang1_20
+
+    steps:
+      - uses: actions/checkout@v3
+      - name: Setup Git
+        run: git config --global url."https://${{ secrets.GH_ACCESS_TOKEN }}:x-oauth-basic@github.com".insteadOf "https://github.com"
+      - name: Build package
+        run: make

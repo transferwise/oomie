@@ -1,6 +1,6 @@
 module github.com/transferwise/oomie
 
-go 1.17
+go 1.20
 
 require (
 	github.com/google/cadvisor v0.44.1
