@@ -9,6 +9,7 @@ import (
 	"path/filepath"
 	"regexp"
 	"runtime"
+	"strings"
 	"time"
 
 	"github.com/google/cadvisor/utils/oomparser"
@@ -25,9 +26,11 @@ import (
 	"k8s.io/client-go/util/homedir"
 )
 
+// see https://github.com/kubernetes/kubernetes/blob/master/pkg/kubelet/stats/cri_stats_provider.go#L900 for regexp structure context
 var (
-	log             *logger.Logger
-	containerRegexp = regexp.MustCompile(`^\/kubepods\/(?:burstable\/)?pod([a-z0-9-]+)`)
+	log               *logger.Logger
+	containerRegexpFS = regexp.MustCompile(`^\/kubepods\/(?:burstable\/)?pod([a-z0-9-]+)`)
+	containerRegexpSD = regexp.MustCompile(`^\/kubepods.slice\/(?:kubepods-burstable.slice\/)kubepods-burstable-pod([a-z0-9_]+)`)
 )
 
 type oomEvent struct {
@@ -75,7 +78,21 @@ func main() {
 
 	for event := range outStream {
 		log.Debugf("raw oom event: %v", event)
-		parsedContainer := containerRegexp.FindStringSubmatch(event.VictimContainerName)
+
+		parsedContainerFS := containerRegexpFS.FindStringSubmatch(event.VictimContainerName)
+		parsedContainerSD := containerRegexpSD.FindStringSubmatch(event.VictimContainerName)
+		parsedContainer := []string{}
+
+		if parsedContainerSD != nil {
+			log.Debugf("using systemd cgroup path")
+			// need to format _ ---> - first
+			parsedContainerSD[1] = strings.ReplaceAll(parsedContainerSD[1], "_", "-")
+			parsedContainer = parsedContainerSD
+		} else {
+			log.Debugf("not using systemd cgroup path")
+			parsedContainer = parsedContainerFS
+		}
+
 		if parsedContainer != nil {
 			if event.TimeOfDeath.Before(startTime) {
 				log.Infof("historic oom, skipping: %s", parsedContainer[1])
